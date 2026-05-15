@@ -21,7 +21,7 @@ describe('integração engine+world', () => {
     const result = interp.runToCompletion()
 
     expect(result.kind).toBe('done')
-    expect(world.checkWin()).toBe(true)
+    expect(world.hasWon()).toBe(true)
   })
 
   it('nível 3: loop para resolve com 10 ticks', () => {
@@ -33,7 +33,7 @@ describe('integração engine+world', () => {
     const interp = new Interpreter(ast!, world)
     interp.runToCompletion()
 
-    expect(world.checkWin()).toBe(true)
+    expect(world.hasWon()).toBe(true)
     expect(interp.getTicksUsed()).toBe(10)
   })
 
@@ -46,7 +46,7 @@ describe('integração engine+world', () => {
     const interp = new Interpreter(ast!, world)
     interp.runToCompletion()
 
-    expect(world.checkWin()).toBe(true)
+    expect(world.hasWon()).toBe(true)
     expect(world.state.deliveredCount).toBe(1)
   })
 
@@ -68,5 +68,21 @@ describe('integração engine+world', () => {
     const code = 'enquanto verdadeiro:\n    mover("leste")'
     const { errors } = parse(code)
     expect(errors).toHaveLength(0) // parser aceita, app filtra
+  })
+
+  it('vitória é sticky: jogador passa pelo alvo e sai, ainda venceu', () => {
+    // Nível 0: alvo está em (2,1). Jogador começa em (1,1) virado para leste.
+    // Ele anda pra leste (pisa no alvo) e depois pra oeste (sai dele).
+    // Mesmo terminando fora do alvo, a vitória deve estar registrada.
+    const code = 'mover("leste")\nmover("oeste")'
+    const level = LEVELS[0]
+    const { ast } = parse(code)
+    const world = new GameWorld(level)
+    const interp = new Interpreter(ast!, world)
+    interp.runToCompletion()
+
+    expect(world.hasWon()).toBe(true)
+    expect(world.evaluateWinCondition()).toBe(false) // não está mais no alvo
+    expect(world.state.victoryAtTick).toBe(1) // venceu no tick 1
   })
 })

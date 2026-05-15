@@ -5,9 +5,10 @@
 > Público-alvo: 12-14 anos aprendendo programação pela primeira vez.
 
 [![Status](https://img.shields.io/badge/status-MVP%20jog%C3%A1vel-green)]()
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)]()
 [![DSL](https://img.shields.io/badge/DSL-Portugol-yellow)]()
 [![Stack](https://img.shields.io/badge/stack-TypeScript%20%7C%20Canvas%202D%20%7C%20Vite-blue)]()
-[![Bundle](https://img.shields.io/badge/bundle-52KB%20%2F%2015KB%20gzip-success)]()
+[![Bundle](https://img.shields.io/badge/bundle-58KB%20%2F%2017KB%20gzip-success)]()
 
 ---
 
@@ -26,6 +27,7 @@ A integração com backend (autenticação, leaderboard global, persistência) e
 - ✅ **Lexer hand-written** com indentação significativa (Python-style)
 - ✅ **Parser recursivo descendente** com error recovery
 - ✅ **Interpretador generator-based** com controle de tick, sandbox e limites
+- ✅ **Vitória sticky** — uma vez alcançada, fica registrada (não se perde ao sair do alvo)
 - ✅ **6 níveis** com curva pedagógica suave (de "mover 1 casa" até "loops + atendimento"):
   - Nível 0 — Primeira instrução (`mover`)
   - Nível 1 — Sequência de comandos
@@ -35,9 +37,12 @@ A integração com backend (autenticação, leaderboard global, persistência) e
   - Nível 5 — `enquanto` + múltiplos pedidos
 - ✅ **Pixel art procedural** desenhada via Canvas 2D (sem assets externos)
 - ✅ **Editor integrado** com Tab=4 espaços, Ctrl+Enter executa, dicas, mostra solução
+- ✅ **Autosave por nível** — código e progresso salvos no localStorage automaticamente
+- ✅ **Painel de variáveis em tempo real** — vê variáveis do usuário + estado do mundo
+- ✅ **Sidebar com progresso** — níveis completos marcados com ✓, melhor score visível
 - ✅ **Mensagens de erro didáticas** em PT-BR
 - ✅ **Speed control** (1x até 30x) e pause/resume
-- ✅ **12 testes passando** cobrindo lexer + integração end-to-end
+- ✅ **13 testes passando** cobrindo lexer + integração end-to-end
 
 ## 🗺️ Roadmap
 

@@ -221,6 +221,40 @@ code {
   white-space: nowrap;
 }
 
+.level-check {
+  color: var(--success);
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.level-btn.completed .level-num {
+  background: var(--success);
+  color: var(--bg);
+}
+
+.level-btn.active.completed .level-num {
+  background: var(--bg);
+  color: var(--accent);
+}
+
+.level-btn.active .level-check {
+  color: var(--bg);
+}
+
+.record-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hot));
+  color: var(--bg);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
 /* ============================================================================
  * Main grid
  * ============================================================================ */
@@ -498,6 +532,7 @@ code {
 
 .tabs {
   display: flex;
+  align-items: center;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
@@ -511,11 +546,42 @@ code {
   text-transform: uppercase;
   cursor: pointer;
   border-bottom: 2px solid transparent;
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  transition: color 0.15s;
+}
+
+.tab:hover {
+  color: var(--text);
 }
 
 .tab-active {
   color: var(--accent);
   border-bottom-color: var(--accent);
+}
+
+.tab-spacer {
+  flex: 1;
+}
+
+.tick-counter {
+  padding: 0 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.tab-pane {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tab-pane-active {
+  display: block;
 }
 
 .errors,
@@ -525,6 +591,60 @@ code {
   padding: 8px 16px;
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* Painel de variáveis */
+
+.vars {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+.vars-empty {
+  color: var(--text-faint);
+  font-style: italic;
+  padding: 12px 0;
+}
+
+.vars-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.vars-table th {
+  text-align: left;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.vars-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--bg-elev-2);
+}
+
+.vars-table tr:last-child td {
+  border-bottom: none;
+}
+
+.var-user .var-name {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.var-world .var-name {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.var-value {
+  color: var(--text);
+  font-family: var(--font-mono);
 }
 
 .error-entry {

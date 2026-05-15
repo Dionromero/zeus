@@ -8,6 +8,7 @@ import { type DSLError } from '@engine/errors'
 import { GameWorld } from '@game/world'
 import { LEVELS, getLevel } from '@game/levels'
 import type { LevelDefinition } from '@game/types'
+import { localRepo } from '@api/local-repo'
 import { CanvasRenderer } from './renderer'
 
 type AppPhase = 'idle' | 'running' | 'paused' | 'done' | 'error'
@@ -32,6 +33,9 @@ export class App {
   private statusEl!: HTMLDivElement
   private storyEl!: HTMLDivElement
   private levelListEl!: HTMLDivElement
+  private varsEl!: HTMLDivElement
+  private tickCounterEl!: HTMLDivElement
+  private lastScopeHash = ''
 
   constructor() {
     this.state = {
@@ -55,6 +59,8 @@ export class App {
     this.statusEl = root.querySelector('#status') as HTMLDivElement
     this.storyEl = root.querySelector('#story') as HTMLDivElement
     this.levelListEl = root.querySelector('#level-list') as HTMLDivElement
+    this.varsEl = root.querySelector('#vars') as HTMLDivElement
+    this.tickCounterEl = root.querySelector('#tick-counter') as HTMLDivElement
 
     this.state.renderer = new CanvasRenderer(this.canvasEl)
     this.attachEvents()
@@ -95,17 +101,45 @@ export class App {
         this.editorEl.selectionStart = this.editorEl.selectionEnd = start + 4
       }
     })
+
+    // Autosave do código com debounce (700ms depois da última digitação)
+    let autosaveTimer: number | null = null
+    this.editorEl.addEventListener('input', () => {
+      if (autosaveTimer !== null) window.clearTimeout(autosaveTimer)
+      autosaveTimer = window.setTimeout(() => {
+        localRepo.saveCode(this.state.currentLevelId, this.editorEl.value)
+      }, 700)
+    })
+
+    // Salva ao trocar de aba/fechar
+    window.addEventListener('beforeunload', () => {
+      localRepo.saveCode(this.state.currentLevelId, this.editorEl.value)
+    })
+
+    // Troca de abas no painel de output
+    document.querySelectorAll('.tab[data-tab]').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const target = (tab as HTMLElement).dataset.tab
+        if (!target) return
+        document.querySelectorAll('.tab[data-tab]').forEach((t) => t.classList.remove('tab-active'))
+        tab.classList.add('tab-active')
+        document.querySelectorAll('.tab-pane').forEach((p) => p.classList.remove('tab-pane-active'))
+        document.querySelector(`.tab-pane[data-pane="${target}"]`)?.classList.add('tab-pane-active')
+      })
+    })
   }
 
   private buildLevelList(): void {
     this.levelListEl.innerHTML = ''
     for (const level of LEVELS) {
+      const progress = localRepo.getProgress(level.id)
       const btn = document.createElement('button')
-      btn.className = 'level-btn'
+      btn.className = 'level-btn' + (progress?.completed ? ' completed' : '')
       btn.dataset.id = String(level.id)
       btn.innerHTML = `
         <span class="level-num">${level.id}</span>
         <span class="level-title">${level.title}</span>
+        ${progress?.completed ? `<span class="level-check" title="Melhor: ${progress.bestScore}">✓</span>` : ''}
       `
       btn.addEventListener('click', () => this.loadLevel(level.id))
       this.levelListEl.appendChild(btn)
@@ -113,6 +147,14 @@ export class App {
   }
 
   private loadLevel(id: number): void {
+    // Salva código do nível atual antes de trocar (autosave)
+    if (this.state.world && this.editorEl?.value !== undefined) {
+      const prevId = this.state.currentLevelId
+      if (prevId !== id && this.editorEl.value.trim().length > 0) {
+        localRepo.saveCode(prevId, this.editorEl.value)
+      }
+    }
+
     this.stop()
     const level = getLevel(id)
     if (!level) return
@@ -120,9 +162,15 @@ export class App {
     this.state.world = new GameWorld(level)
     this.state.renderer!.resize(this.state.world.state)
 
+    // Recorde pessoal, se houver
+    const progress = localRepo.getProgress(id)
+    const recordBadge = progress?.completed
+      ? `<span class="record-badge">🏆 Melhor: ${progress.bestScore} pts (${progress.bestTicks} ticks)</span>`
+      : ''
+
     // Atualiza UI
     this.storyEl.innerHTML = `
-      <h2>Nível ${level.id}: ${level.title}</h2>
+      <h2>Nível ${level.id}: ${level.title} ${recordBadge}</h2>
       <p class="subtitle">${level.subtitle}</p>
       <p class="story">${level.story}</p>
       <p class="objective"><strong>Objetivo:</strong> ${level.objective}</p>
@@ -137,8 +185,9 @@ export class App {
     document.querySelectorAll('.level-btn').forEach((b) => b.classList.remove('active'))
     document.querySelector(`.level-btn[data-id="${id}"]`)?.classList.add('active')
 
-    // Limpa editor se vazio, ou se está mudando de nível
-    this.editorEl.value = this.editorEl.value.trim() ? this.editorEl.value : ''
+    // Carrega código salvo (se houver), senão deixa vazio
+    const savedCode = localRepo.loadCode(id)
+    this.editorEl.value = savedCode ?? ''
     this.editorEl.placeholder = `# Nível ${id}: ${level.title}\n# Escreva seu código aqui e clique em ▶ Executar\n# Atalho: Ctrl+Enter`
 
     this.clearLog()
@@ -155,6 +204,10 @@ export class App {
     this.clearErrors()
     this.clearLog()
     const source = this.editorEl.value
+
+    // Salva código + incrementa tentativas
+    localRepo.saveCode(this.state.currentLevelId, source)
+    localRepo.recordAttempt(this.state.currentLevelId)
 
     // Parse
     const { ast, errors } = parse(source)
@@ -255,18 +308,33 @@ export class App {
 
   private checkVictory(): void {
     if (!this.state.world) return
-    const win = this.state.world.checkWin()
+    const won = this.state.world.hasWon()
     const ticks = this.state.interpreter?.getTicksUsed() ?? 0
-    if (win) {
+    if (won) {
       const level = getLevel(this.state.currentLevelId)!
-      const score = computeScore(level, ticks, this.state.world)
-      this.appendLog(`✅ Nível completo! Ticks: ${ticks} • Score: ${score}`)
+      // Usa o tick em que a vitória foi ALCANÇADA, não o tick final.
+      // Isso evita penalizar quem completa o objetivo cedo e o programa
+      // continua rodando depois.
+      const winTicks = this.state.world.state.victoryAtTick || ticks
+      const score = computeScore(level, winTicks, this.state.world)
+      this.appendLog(`✅ Nível completo em ${winTicks} ticks! Score: ${score}`)
       this.setStatus('done', `✅ Vitória! Score: ${score}`)
+      this.markLevelCompleted(this.state.currentLevelId, score, winTicks)
       // TODO: aqui faria a chamada pra kratosClient.submitRun(...)
     } else {
       this.appendLog(`❌ Programa terminou mas o objetivo não foi atingido. Ticks: ${ticks}`)
       this.setStatus('done', 'Tente de novo')
     }
+  }
+
+  private markLevelCompleted(levelId: number, score: number, ticks: number): void {
+    const { newBest } = localRepo.recordCompletion(levelId, score, ticks)
+    if (newBest) {
+      this.appendLog(`🏆 Novo recorde pessoal: ${score} pontos!`)
+    }
+    // Atualiza a sidebar com o check
+    this.buildLevelList()
+    document.querySelector(`.level-btn[data-id="${levelId}"]`)?.classList.add('active')
   }
 
   private render(): void {
@@ -277,6 +345,80 @@ export class App {
     if (this.state.highlightLine !== null) {
       this.editorEl.style.setProperty('--highlight-line', String(this.state.highlightLine))
     }
+
+    // Painel de variáveis e contador de ticks
+    this.renderVarsAndTicks()
+  }
+
+  private renderVarsAndTicks(): void {
+    const interp = this.state.interpreter
+    const ticks = interp?.getTicksUsed() ?? 0
+    this.tickCounterEl.textContent = `⏱ ${ticks} ticks`
+
+    if (!interp) {
+      this.lastScopeHash = ''
+      return
+    }
+    const scope = interp.getScope()
+    // Adiciona dados do mundo como "variáveis especiais" pro jogador entender o estado
+    const world = this.state.world?.state
+    const enriched: Array<{ name: string; value: string; kind: 'user' | 'world' }> = []
+
+    for (const [k, v] of Object.entries(scope)) {
+      enriched.push({ name: k, value: formatValue(v), kind: 'user' })
+    }
+    if (world) {
+      enriched.push({
+        name: 'jogador.posicao',
+        value: `${world.player.x},${world.player.y}`,
+        kind: 'world',
+      })
+      enriched.push({
+        name: 'jogador.olhando',
+        value: world.player.facing,
+        kind: 'world',
+      })
+      enriched.push({
+        name: 'jogador.segurando',
+        value: world.player.holding ?? 'nulo',
+        kind: 'world',
+      })
+      enriched.push({
+        name: 'pedidos.na_fila',
+        value: String(world.orderQueue.length),
+        kind: 'world',
+      })
+      enriched.push({
+        name: 'pizzas.entregues',
+        value: String(world.deliveredCount),
+        kind: 'world',
+      })
+    }
+
+    // Hash simples pra evitar re-renderização desnecessária
+    const hash = enriched.map((v) => `${v.name}=${v.value}`).join('|')
+    if (hash === this.lastScopeHash) return
+    this.lastScopeHash = hash
+
+    if (enriched.length === 0) {
+      this.varsEl.innerHTML = '<div class="vars-empty">Nenhuma variável definida ainda.</div>'
+      return
+    }
+    this.varsEl.innerHTML = `
+      <table class="vars-table">
+        <thead>
+          <tr><th>Nome</th><th>Valor</th></tr>
+        </thead>
+        <tbody>
+          ${enriched
+            .map(
+              (v) =>
+                `<tr class="var-${v.kind}"><td class="var-name">${escapeHtml(v.name)}</td><td class="var-value">${escapeHtml(v.value)}</td></tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>
+    `
   }
 
   // ============================================================================
@@ -360,6 +502,16 @@ function escapeHtml(s: string): string {
   return div.innerHTML
 }
 
+function formatValue(v: unknown): string {
+  if (v === null || v === undefined) return 'nulo'
+  if (typeof v === 'boolean') return v ? 'verdadeiro' : 'falso'
+  if (typeof v === 'string') return `"${v}"`
+  if (typeof v === 'number') {
+    return Number.isInteger(v) ? String(v) : v.toFixed(2)
+  }
+  return String(v)
+}
+
 // ============================================================================
 // Template HTML
 // ============================================================================
@@ -408,10 +560,16 @@ const TEMPLATE = `
     </section>
     <section class="output-panel">
       <div class="tabs">
-        <div class="tab tab-active">Console</div>
+        <div class="tab tab-active" data-tab="console">Console</div>
+        <div class="tab" data-tab="vars">Variáveis</div>
+        <div class="tab-spacer"></div>
+        <div class="tick-counter" id="tick-counter">⏱ 0 ticks</div>
       </div>
       <div id="errors" class="errors"></div>
-      <div id="log" class="log"></div>
+      <div id="log" class="log tab-pane tab-pane-active" data-pane="console"></div>
+      <div id="vars" class="vars tab-pane" data-pane="vars">
+        <div class="vars-empty">Execute o programa para ver as variáveis aqui.</div>
+      </div>
     </section>
   </main>
 </div>

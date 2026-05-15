@@ -147,6 +147,9 @@ export class GameWorld implements WorldHandle {
       deliveredCount: 0,
       burnedCount: 0,
       money: 0,
+      totalTicks: 0,
+      victoryReached: false,
+      victoryAtTick: 0,
     }
   }
 
@@ -173,6 +176,7 @@ export class GameWorld implements WorldHandle {
   /** Avança o estado do mundo em N ticks (cozimento, etc). */
   advanceTicks(n: number): void {
     for (let i = 0; i < n; i++) {
+      this.state.totalTicks++
       // Atualiza forno: pizza cozinha
       for (const forno of this.state.fornos) {
         if (forno.pizza) {
@@ -186,11 +190,16 @@ export class GameWorld implements WorldHandle {
           }
         }
       }
+      // Checa vitória a cada tick (sticky)
+      this.recordWinAttempt()
     }
   }
 
-  /** Verifica se a condição de vitória do nível foi atingida. */
-  checkWin(): boolean {
+  /**
+   * Verifica se a condição de vitória do nível foi atingida no instante atual.
+   * Não tem efeito colateral. Use `recordWinAttempt()` para marcar vitória sticky.
+   */
+  evaluateWinCondition(): boolean {
     const cond = this.level.winCondition
     if (cond.startsWith('player_on_tile_type:')) {
       const target = cond.split(':')[1]
@@ -203,9 +212,29 @@ export class GameWorld implements WorldHandle {
       return mesa?.served === true
     }
     if (cond === 'all_orders_delivered') {
-      return this.state.orderQueue.length === 0 && this.state.mesas.every((m) => m.served || m.waitingFor === null)
+      return (
+        this.state.orderQueue.length === 0 &&
+        this.state.mesas.every((m) => m.served || m.waitingFor === null)
+      )
     }
     return false
+  }
+
+  /**
+   * Avalia a condição e, se for verdadeira, marca a vitória como alcançada.
+   * Uma vez marcada, fica marcada — vitória é "sticky", não pode ser perdida
+   * por uma ação subsequente do jogador (ex: andar para fora do alvo).
+   */
+  recordWinAttempt(): void {
+    if (!this.state.victoryReached && this.evaluateWinCondition()) {
+      this.state.victoryReached = true
+      this.state.victoryAtTick = this.state.totalTicks
+    }
+  }
+
+  /** Retorna se o jogador já venceu em algum momento da execução. */
+  hasWon(): boolean {
+    return this.state.victoryReached
   }
 }
 

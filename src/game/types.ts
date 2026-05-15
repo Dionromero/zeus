@@ -73,6 +73,12 @@ export interface WorldState {
   deliveredCount: number
   burnedCount: number
   money: number
+  /** Total de ticks consumidos pelo mundo (uso interno, cozimento, etc). */
+  totalTicks: number
+  /** Vitória sticky: uma vez true, permanece true até reset. */
+  victoryReached: boolean
+  /** Tick em que a vitória foi alcançada (pra scoring). */
+  victoryAtTick: number
 }
 
 export interface LevelDefinition {
